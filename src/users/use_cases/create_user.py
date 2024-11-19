@@ -55,7 +55,7 @@ class CreateUser(UseCase):
 
     def _log(self, user: User) -> None:
         with EventLogClient.init() as client:
-            client.insert(
+            client.insert_to_outbox(
                 data=[
                     UserCreated(
                         email=user.email,

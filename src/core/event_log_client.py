@@ -7,9 +7,11 @@ import clickhouse_connect
 import structlog
 from clickhouse_connect.driver.exceptions import DatabaseError
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 
 from core.base_model import Model
+from outbox.models import EventOutbox
 
 logger = structlog.get_logger(__name__)
 
@@ -44,13 +46,32 @@ class EventLogClient:
         finally:
             client.close()
 
+    def insert_to_outbox(
+            self,
+            data: list[Model],
+    ) -> None:
+        try:
+            converted_data = self._convert_data(data)
+            with transaction.atomic():
+                events = [
+                    EventOutbox(
+                        event_type=event[0],
+                        event_date_time=event[1],
+                        environment=event[2],
+                        event_context=event[3],
+                    ) for event in converted_data
+                ]
+                e = EventOutbox.objects.bulk_create(events)
+        except Exception as e:
+            logger.error('unable to insert data to outbox', error=str(e))
+
     def insert(
         self,
-        data: list[Model],
+        data: list[tuple[Any]],
     ) -> None:
         try:
             self._client.insert(
-                data=self._convert_data(data),
+                data=data,
                 column_names=EVENT_LOG_COLUMNS,
                 database=settings.CLICKHOUSE_SCHEMA,
                 table=settings.CLICKHOUSE_EVENT_LOG_TABLE_NAME,
