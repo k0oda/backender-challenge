@@ -1,4 +1,3 @@
-import re
 from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any
@@ -7,11 +6,6 @@ import clickhouse_connect
 import structlog
 from clickhouse_connect.driver.exceptions import DatabaseError
 from django.conf import settings
-from django.db import transaction
-from django.utils import timezone
-
-from core.base_model import Model
-from outbox.models import EventOutbox
 
 logger = structlog.get_logger(__name__)
 
@@ -46,25 +40,6 @@ class EventLogClient:
         finally:
             client.close()
 
-    def insert_to_outbox(
-            self,
-            data: list[Model],
-    ) -> None:
-        try:
-            converted_data = self._convert_data(data)
-            with transaction.atomic():
-                events = [
-                    EventOutbox(
-                        event_type=event[0],
-                        event_date_time=event[1],
-                        environment=event[2],
-                        event_context=event[3],
-                    ) for event in converted_data
-                ]
-                e = EventOutbox.objects.bulk_create(events)
-        except Exception as e:
-            logger.error('unable to insert data to outbox', error=str(e))
-
     def insert(
         self,
         data: list[tuple[Any]],
@@ -87,19 +62,3 @@ class EventLogClient:
         except DatabaseError as e:
             logger.error('failed to execute clickhouse query', error=str(e))
             return
-
-    def _convert_data(self, data: list[Model]) -> list[tuple[Any]]:
-        return [
-            (
-                self._to_snake_case(event.__class__.__name__),
-                timezone.now(),
-                settings.ENVIRONMENT,
-                event.model_dump_json(),
-            )
-            for event in data
-        ]
-
-    def _to_snake_case(self, event_name: str) -> str:
-        result = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', event_name)
-        return re.sub('([a-z0-9])([A-Z])', r'\1_\2', result).lower()
-
