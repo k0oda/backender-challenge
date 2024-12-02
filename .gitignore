@@ -12,6 +12,7 @@ __pycache__/
 # Distribution / packaging
 .Python
 env/
+.venv
 develop-eggs/
 dist/
 downloads/
@@ -109,6 +110,7 @@ media/*
 
 .envrc
 .pytest_cache
+.ruff_cache
 .postgres
 *.sqlite
 *.sqlite3
